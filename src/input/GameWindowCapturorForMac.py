@@ -3,7 +3,6 @@ import time
 import threading
 
 # Library import
-import mss
 import cv2
 import numpy as np
 import Quartz
@@ -71,9 +70,6 @@ class GameWindowCapturor:
         self.fps_limit = cfg["system"]["fps_limit_window_capturor"]
         self.t_last_run = 0.0
 
-        # 使用 mss 來擷取特定螢幕區域
-        self.capture = mss.mss()
-
         # Get game window region
         self.update_window_region()
 
@@ -118,10 +114,32 @@ class GameWindowCapturor:
 
     def capture_frame(self):
         '''
-        捕捉當前遊戲區域畫面
+        使用 Quartz CGWindowListCreateImage 捕捉完整 Retina 分辨率畫面
         '''
-        img = self.capture.grab(self.region)
-        frame = np.array(img)
+        region = self.region
+        rect = Quartz.CGRectMake(
+            region["left"], region["top"],
+            region["width"], region["height"]
+        )
+        cg_image = Quartz.CGWindowListCreateImage(
+            rect,
+            Quartz.kCGWindowListOptionOnScreenOnly,
+            Quartz.kCGNullWindowID,
+            Quartz.kCGWindowImageBestResolution
+        )
+        if cg_image is None:
+            return
+
+        width = Quartz.CGImageGetWidth(cg_image)
+        height = Quartz.CGImageGetHeight(cg_image)
+        bpr = Quartz.CGImageGetBytesPerRow(cg_image)
+        data = Quartz.CGDataProviderCopyData(
+            Quartz.CGImageGetDataProvider(cg_image)
+        )
+        frame = np.frombuffer(data, dtype=np.uint8)
+        frame = frame.reshape((height, bpr // 4, 4))[:, :width, :]
+        frame = np.ascontiguousarray(frame)
+
         with self.lock:
             self.frame = frame
 
