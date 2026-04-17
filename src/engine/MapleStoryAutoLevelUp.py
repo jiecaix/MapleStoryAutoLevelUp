@@ -66,6 +66,7 @@ class MapleStoryAutoBot:
         self.cmd_move_x = "none" # "left" "right"
         self.cmd_move_y = "none" # "up" "down"
         self.cmd_action = "none" # "jump" "attack" ....
+        self.character_direction = "none"
         # Signals (for UI)
         self.image_debug_signal = None
         self.route_map_viz_signal = None
@@ -238,7 +239,11 @@ class MapleStoryAutoBot:
             cfg['ui_coords']['login_button_bottom_right'], cfg['game_window']['size'])
 
         # Print mode on log
-        logger.info(f"[load_config] Config AutoBot as {cfg['bot']['mode']} mode")
+        attack_mode = cfg['bot']['attack']
+        attack_hold = cfg[{"directional": "directional_attack", "aoe_skill": "aoe_skill"}[attack_mode]].get('attack_hold', False)
+        logger.info(f"[load_config] Config AutoBot as {cfg['bot']['mode']} mode, "
+                     f"attack={attack_mode}, "
+                     f"attack_hold={attack_hold}")
 
         # Update cfg
         self.cfg = cfg
@@ -1497,15 +1502,31 @@ class MapleStoryAutoBot:
         # Get monsters in the search box
         self.monsters = self.get_monsters_in_range((x0, y0), (x1, y1))
 
+        # Get attack_hold from the active attack mode config
+        attack_mode = self.cfg["bot"]["attack"]
+        attack_hold = self.cfg[{"directional": "directional_attack", "aoe_skill": "aoe_skill"}[attack_mode]].get("attack_hold", False)
         # Check if no mob to attack
         if len(self.monsters) == 0:
+            if attack_hold:
+                logger.debug(f"[hold_attack] No mob ({len(self.monsters)}), cmd_action: {self.cmd_action} -> release_attack")
+                self.cmd_action = "release_attack"
             return
 
         # Update attack command
         if self.cfg["bot"]["attack"] == "aoe_skill":
             if time.time() - self.t_last_attack > cooldown:
-                self.cmd_action = "attack"
+                if attack_hold:
+                    logger.debug(f"[hold_attack] Mob detected ({len(self.monsters)}), cooldown ready, cmd_action: {self.cmd_action} -> hold_attack")
+                    self.cmd_action = "hold_attack"
+                else:
+                    self.cmd_action = "attack"
+                self.cmd_move_x = "stop"
                 self.t_last_attack = time.time()
+            else:
+                self.cmd_move_x = "stop"
+                if attack_hold:
+                    logger.debug(f"[hold_attack] Mob detected ({len(self.monsters)}), on cooldown, cmd_action: {self.cmd_action} -> hold_attack")
+                    self.cmd_action = "hold_attack"
 
         elif self.cfg["bot"]["attack"] == "directional":
             # Get nearest monster to player
@@ -1515,10 +1536,25 @@ class MapleStoryAutoBot:
             attack_direction = self.get_attack_direction(monster_left, monster_right)
             # Attack Command
             if time.time() - self.t_last_attack > cooldown and attack_direction is not None:
-                self.cmd_action = "attack"
                 self.t_last_attack = time.time()
-                # Set up attack direction
-                self.cmd_move_x = attack_direction
+                if attack_direction == self.character_direction:
+                    if attack_hold:
+                        self.cmd_action = "hold_attack"
+                    else:
+                        self.cmd_action = "attack"
+                    self.cmd_move_x = "stop"
+                else:
+                    # Need to turn: release attack first, then face the monster
+                    if attack_hold:
+                        self.cmd_action = "release_attack"
+                    self.cmd_move_x = attack_direction
+            else:
+                self.cmd_move_x = "stop"
+                if attack_hold and attack_direction is not None:
+                    if attack_direction == self.character_direction:
+                        self.cmd_action = "hold_attack"
+                    else:
+                        self.cmd_action = "release_attack"
 
     def update_cmd_by_random(self):
         '''
@@ -1714,6 +1750,10 @@ class MapleStoryAutoBot:
         ### State Behavior ###
         ######################
         self.fsm.do_state_stuff()
+
+        # Track character facing direction
+        if self.cmd_move_x in ("left", "right"):
+            self.character_direction = self.cmd_move_x
 
         self.is_first_frame = False
 

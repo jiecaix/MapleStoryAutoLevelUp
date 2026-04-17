@@ -73,6 +73,7 @@ class KeyBoardController():
         self.cmd_left_right = "none"
         self.cmd_up_down_last = ""
         self.cmd_left_right_last = ""
+        self._last_action = "none"
         self.window_title = cfg["game_window"]["title"]
         self.fps = 0 # Frame per seconds
         # Timer
@@ -276,6 +277,15 @@ class KeyBoardController():
             elif self.cmd_action == "attack":
                 press_key(self.attack_key)
                 self.t_last_skill = time.time()
+            elif self.cmd_action == "hold_attack":
+                if self._last_action != "hold_attack":
+                    logger.debug(f"[KB] hold_attack: key_down({self.attack_key}), prev={self._last_action}")
+                    key_down(self.attack_key)
+                    self.t_last_skill = time.time()
+            elif self.cmd_action == "release_attack":
+                if self._last_action == "hold_attack":
+                    logger.debug(f"[KB] release_attack: key_up({self.attack_key}), prev={self._last_action}")
+                    key_up(self.attack_key)
             elif self.cmd_action == "add_hp":
                 press_key(self.cfg["key"]["add_hp"])
                 self.cmd_action = "none"  # Reset command
@@ -289,6 +299,8 @@ class KeyBoardController():
             else:
                 logger.error("[KeyBoardController] Unsupported action command: "
                              f"{self.cmd_action}")
+
+            self._last_action = self.cmd_action
 
             self.limit_fps()
 

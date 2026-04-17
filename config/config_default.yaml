@@ -46,6 +46,7 @@ directional_attack:
   range_y: 70                # ↕️ Vertical attack range (in pixels)
   cooldown: 0.9              # ⏱️ Time between attacks (in seconds)
   character_turn_delay: 0.02 # 🔄 Delay after turning before attacking (in seconds)
+  attack_hold: false
 
 aoe_skill:
   # 💥 AoE Skill
@@ -54,7 +55,8 @@ aoe_skill:
   range_x: 400               # ↔️ Horizontal skill range (in pixels)
   range_y: 170               # ↕️ Vertical skill range (in pixels)
   cooldown: 0.05             # TODO: Currently just a filler
-
+  attack_hold: false
+  
 health_monitor:
   # ❤️ Health Monitor
   # Automatically drinks HP/MP potions when health or mana drops below a threshold.
