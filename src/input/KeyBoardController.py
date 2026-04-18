@@ -283,7 +283,7 @@ class KeyBoardController():
                     key_down(self.attack_key)
                     self.t_last_skill = time.time()
             elif self.cmd_action == "release_attack":
-                if self._last_action == "hold_attack":
+                if self._last_action != "release_attack":
                     logger.debug(f"[KB] release_attack: key_up({self.attack_key}), prev={self._last_action}")
                     key_up(self.attack_key)
             elif self.cmd_action == "add_hp":
