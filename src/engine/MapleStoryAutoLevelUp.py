@@ -1490,7 +1490,7 @@ class MapleStoryAutoBot:
             cooldown = self.cfg["aoe_skill"]["cooldown"]
         elif self.cfg["bot"]["attack"] == "directional":
             dx = self.cfg["directional_attack"]["range_x"] + margin
-            dy = self.cfg["directional_attack"]["range_y"] + margin
+            dy = self.cfg["directional_attack"]["range_y"] // 2 + margin
             cooldown = self.cfg["directional_attack"]["cooldown"]
         else:
             raise RuntimeError(f"Unsupported attack mode: {self.cfg['bot']['attack']}")
