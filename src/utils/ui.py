@@ -71,6 +71,7 @@ class SingleKeyEdit(QKeySequenceEdit):
         # Allow modifier-only keys
         if key in (Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta):
             self.setKeySequence(QKeySequence(key))
+            event.accept()
             return
 
         # Otherwise, record only one key (replace previous)
@@ -79,6 +80,8 @@ class SingleKeyEdit(QKeySequenceEdit):
             self.setKeySequence(QKeySequence(key))
         else:
             self.setKeySequence(QKeySequence(key))
+
+        event.accept()
 
     def set_key(self, key_str):
         """
