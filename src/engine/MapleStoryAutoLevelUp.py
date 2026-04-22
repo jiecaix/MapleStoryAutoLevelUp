@@ -1346,19 +1346,17 @@ class MapleStoryAutoBot:
             left_valid = is_monster_on_correct_side(monster_left, "left")
             right_valid = is_monster_on_correct_side(monster_right, "right")
 
-            if left_valid and not right_valid:
-                attack_direction = "left"
-                # nearest_monster = monster_left
-            elif right_valid and not left_valid:
-                attack_direction = "right"
-                # nearest_monster = monster_right
-            elif left_valid and right_valid and distance_left < distance_right - 50:
-                attack_direction = "left"
-                # nearest_monster = monster_left
-            elif left_valid and right_valid and distance_right < distance_left - 50:
-                attack_direction = "right"
-                # nearest_monster = monster_right
-            # If both valid but distances too close, don't attack to avoid confusion
+            # Prioritize current facing direction: only turn when no monster ahead
+            if self.character_direction == "left":
+                if left_valid:
+                    attack_direction = "left"
+                elif right_valid:
+                    attack_direction = "right"
+            else:  # character_direction == "right"
+                if right_valid:
+                    attack_direction = "right"
+                elif left_valid:
+                    attack_direction = "left"
 
         # Debug attack direction selection
         if monster_left is not None or monster_right is not None:
@@ -1536,8 +1534,8 @@ class MapleStoryAutoBot:
             attack_direction = self.get_attack_direction(monster_left, monster_right)
             # Attack Command
             if time.time() - self.t_last_attack > cooldown and attack_direction is not None:
-                self.t_last_attack = time.time()
                 if attack_direction == self.character_direction:
+                    self.t_last_attack = time.time()
                     if attack_hold:
                         self.cmd_action = "hold_attack"
                     else:
@@ -1545,6 +1543,7 @@ class MapleStoryAutoBot:
                     self.cmd_move_x = "stop"
                 else:
                     # Need to turn: release attack first, then face the monster
+                    # Don't update t_last_attack here — only update when actually attacking
                     if attack_hold:
                         self.cmd_action = "release_attack"
                     self.cmd_move_x = attack_direction
