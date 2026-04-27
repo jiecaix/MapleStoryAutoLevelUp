@@ -1352,11 +1352,22 @@ class MapleStoryAutoBot:
                     attack_direction = "left"
                 elif right_valid:
                     attack_direction = "right"
-            else:  # character_direction == "right"
+            elif self.character_direction == "right":
                 if right_valid:
                     attack_direction = "right"
                 elif left_valid:
                     attack_direction = "left"
+            else:  # character_direction == "none", choose closer monster
+                if left_valid and right_valid:
+                    # Both sides valid, choose closer one
+                    if distance_left < distance_right:
+                        attack_direction = "left"
+                    else:
+                        attack_direction = "right"
+                elif left_valid:
+                    attack_direction = "left"
+                elif right_valid:
+                    attack_direction = "right"
 
         # Debug attack direction selection
         if monster_left is not None or monster_right is not None:
