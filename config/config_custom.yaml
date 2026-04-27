@@ -2,11 +2,6 @@ aoe_skill:
   cooldown: 0.2
 bot:
   map: destroyed_dragon_nest
-buff_skill:
-  cooldown:
-  - 101
-  keys:
-  - a
 directional_attack:
   attack_hold: true
   character_turn_delay: 0.1
@@ -29,21 +24,12 @@ monster_detect:
   search_box_margin: 0
 nametag:
   diff_thres: 0.3
-  enable: true
   local_search_radius: 150
   mode: white_mask
   name: name_tag_green
   offset:
   - 0
   - 50
-party_aided_search:
-  fallback_to_global: false
-  search_offset:
-  - -80
-  - 0
-  search_size:
-  - 180
-  - 200
 profiler:
   enable: true
 system:

@@ -526,6 +526,12 @@ class MapleStoryAutoBot:
         max_x, max_y = int(sr[2] * camera_w), int(sr[3] * camera_h)
         boxs = [b for b in boxs if min_x <= b[0] <= max_x and min_y <= b[1] <= max_y]
 
+        # Draw search region boundary for debug
+        if self.img_frame_debug is not None:
+            cv2.rectangle(self.img_frame_debug, (min_x, min_y), (max_x, max_y), (255, 0, 0), 1)
+            cv2.putText(self.img_frame_debug, "search_region",
+                        (min_x, min_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+
         if not boxs:
             return None, None
 
