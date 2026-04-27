@@ -88,6 +88,7 @@ class MapleStoryAutoBot:
         self.loc_minimap_global = (0, 0) # minimap location on global map
         self.loc_player_global = (0, 0) # player location on global map
         self.loc_watch_dog = (0, 0) # watch dog location on global map
+        self.is_minimap_global_cached = False # minimap global position cache flag
         # Images
         self.frame = None # raw image
         self.img_frame = None # game window frame
@@ -538,9 +539,18 @@ class MapleStoryAutoBot:
         '''
         get_player_location_on_global_map
         '''
-        self.loc_minimap_global, score, _ = find_pattern_sqdiff(
-                                        self.img_map,
-                                        self.img_minimap)
+        # Only find minimap position once since it's fixed on the map
+        if not self.is_minimap_global_cached:
+            self.loc_minimap_global, score, _ = find_pattern_sqdiff(
+                                            self.img_map,
+                                            self.img_minimap)
+            self.is_minimap_global_cached = True
+            logger.info(f"[get_player_location_on_global_map] "
+                       f"Minimap position cached at {self.loc_minimap_global}, "
+                       f"score={round(score, 2)}")
+            score = score  # For debug display
+        else:
+            score = 0.0  # Cached, no score needed
 
         x_offset, y_offset = self.cfg["minimap"]["offset"]
         loc_player_global = (
