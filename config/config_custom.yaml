@@ -1,0 +1,40 @@
+aoe_skill:
+  cooldown: 0.2
+bot:
+  map: destroyed_dragon_nest
+directional_attack:
+  attack_hold: true
+  character_turn_delay: 0.3
+  cooldown: 1.0
+  hold: true
+  range_x: 400
+  range_y: 200
+edge_teleport:
+  enable: false
+health_monitor:
+  add_hp_percent: 0
+  add_mp_percent: 0
+  enable: false
+key:
+  aoe_skill: x
+  directional_attack: c
+  return_home: "\u2196"
+  teleport: ''
+monster_detect:
+  contour_blur: 11
+  diff_thres: 0.95
+  search_box_margin: 0
+nametag:
+  diff_thres: 0.1
+  enable: true
+  global_diff_thres: 0.1
+  name: name_tag_green
+  offset:
+  - 0
+  - 50
+system:
+  fps_limit_main: 5
+  fps_limit_route_recorder: 5
+  fps_limit_window_capturor: 10
+watchdog:
+  timeout: 100

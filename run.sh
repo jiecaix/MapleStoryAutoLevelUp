@@ -1,0 +1,1 @@
+source activate artale && python -m src.main --config config/config_custom.yaml --debug

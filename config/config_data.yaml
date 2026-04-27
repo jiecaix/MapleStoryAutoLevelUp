@@ -52,7 +52,7 @@ eng_to_cn:
   moon_bunny: 月妙
   nependeath: 食人花
   dark_nependeath: 黑食人花
-
+  destroyed_dragon_nest: 毀滅的龍巢
 # Register mobs in each maps
 map_mobs_mapping:
   ant_cave_2: [spike_mushroom, zombie_mushroom]
@@ -77,3 +77,4 @@ map_mobs_mapping:
   black_mountain: [hodori, moon_bunny, black_axe_stump]
   disposed_flower_garden: [nependeath, dark_nependeath]
   mu_Lung_wild_bear_area_2: [grizzly, panda]
+  destroyed_dragon_nest: [jr._newtie, nest_golem]
