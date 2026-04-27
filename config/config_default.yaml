@@ -97,6 +97,16 @@ party_red_bar:
   create_party_button_cn_thres: 0.04   # 📏 threshold for create party button matching
   create_party_button_eng_thres: 0.04 # 📏 threshold for create party button matching
 
+party_aided_search:
+  # 🎯 Party-Aided Nametag Search
+  # When enabled, limits nametag search to a region around the party red bar.
+  # This provides ~33x performance improvement (30k pixels vs 983k pixels).
+  # Only works when both party red bar and nametag detection are available.
+  enable: True                    # ✅ Enable or disable party-aided search
+  search_offset: [-100, -60]      # 🎯 Search region top-left offset from red bar top-left [x, y]
+  search_size: [200, 150]         # 📐 Search region size [width, height] in pixels
+  fallback_to_global: True        # 🔄 Fall back to global search if aided search fails
+
 nametag:
   # 🏷️ NameTag Recognition
   # ⚠️ This feature is deprecated, using party red bar is way better than detecting nametag.
@@ -111,6 +121,11 @@ nametag:
   # If the diff is higher than this threshold, do a full-frame search.
   # If lower, search near the last known location to save time.
   # Set to 0.0 to disable this optimization
+
+  local_search_radius: 50  # 🎯 Radius (pixels) for local search around last position
+  # Only searches within this radius to save computation.
+  # Increase if character moves fast (e.g., 80-150)
+  # Decrease to 0 to always do global search (not recommended)
 
   split_width: 30  # ✂️ pixels width of each vertical split
   # To avoid occlusion from ladders or background objects,
@@ -141,6 +156,10 @@ monster_detect:
   with_enemy_hp_bar: True      # ❤️ Enable smarter detection using enemy HP bars.
   hp_bar_color: [71, 204, 64]  # 💚 Enemy HP bar color (in BGR format)
   max_mob_area_trigger: 1500   # 📏 How much does the mob need to overlap with attack range to be considered as a target
+
+  # ⚡ Performance Optimization
+  enable_parallel_matching: True    # ✅ Enable parallel template matching for multiple monsters
+  max_workers: 4                   # 🧵 Number of parallel workers (recommended: 2-8, depending on CPU cores)
 
 channel_change:
   # 🔁 Auto change channel when other player detected
