@@ -778,17 +778,6 @@ class MapleStoryAutoBot:
         if not boxs:
             return None, []  # ✅ 返回空列表
 
-        # Filter red bars to configured search region
-        sr = self.cfg["party_red_bar"].get("search_region", [0.0, 0.33, 1.0, 1.0])
-        camera_h = self.cfg["ui_coords"]["ui_y_start"]
-        camera_w = img_camera.shape[1]
-        min_x, min_y = int(sr[0] * camera_w), int(sr[1] * camera_h)
-        max_x, max_y = int(sr[2] * camera_w), int(sr[3] * camera_h)
-        boxs = [b for b in boxs if min_x <= b[0] <= max_x and min_y <= b[1] <= max_y]
-
-        if not boxs:
-            return None, []
-
         # Sort box by area
         boxs.sort(key=lambda box: box[2] * box[3], reverse=True)
 
