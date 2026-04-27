@@ -99,13 +99,16 @@ party_red_bar:
 
 party_aided_search:
   # 🎯 Party-Aided Nametag Search
-  # When enabled, limits nametag search to a region around the party red bar.
-  # This provides ~33x performance improvement (30k pixels vs 983k pixels).
+  # When enabled, limits nametag search to regions around all detected party red bars.
+  # This provides ~33x performance improvement (30k pixels vs 983k pixels per search).
   # Only works when both party red bar and nametag detection are available.
   enable: True                    # ✅ Enable or disable party-aided search
   search_offset: [-100, -60]      # 🎯 Search region top-left offset from red bar top-left [x, y]
   search_size: [200, 150]         # 📐 Search region size [width, height] in pixels
   fallback_to_global: True        # 🔄 Fall back to global search if aided search fails
+  max_red_bars: 3                 # 🎯 Maximum number of red bars to process (default: 3)
+                                 # Set to 1 to maintain old behavior (only search largest red bar)
+                                 # Increase if you have more party members (recommended: 3-6)
 
 nametag:
   # 🏷️ NameTag Recognition

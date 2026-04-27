@@ -81,7 +81,7 @@ class MapleStoryAutoBot:
         self.is_frame_done = False #
         # Coordinate (top-left coordinate)
         self.loc_nametag = (0, 0) # nametag location on game screen
-        self.loc_party_red_bar = (0, 0) # party red bar location on game screen
+        self.loc_party_red_bar = [] # party red bar locations on game screen (list of tuples)
         self.is_using_party_aided_search = False # current using party-aided search
         self.loc_minimap = (0, 0) # minimap location on game screen
         self.loc_player = (0, 0) # player location on game screen
@@ -370,14 +370,14 @@ class MapleStoryAutoBot:
         # Check if party-aided search is enabled and available
         if use_party_aided_search and \
            self.cfg.get("party_aided_search", {}).get("enable", False) and \
-           self.loc_party_red_bar != (0, 0):
+           len(self.loc_party_red_bar) > 0:
 
-            logger.info("[get_player_location_by_nametag] 🎯 Using PARTY-AIDED search "
-                       f"(party_red_bar={self.loc_party_red_bar})")
+            logger.info(f"[get_player_location_by_nametag] 🎯 Using PARTY-AIDED search "
+                       f"(red_bars={len(self.loc_party_red_bar)})")
             self.is_using_party_aided_search = True
 
             # Try aided search
-            loc_player = self._get_player_location_by_nametag_aided()
+            loc_player = self._get_player_location_by_nametag_aided(self.loc_party_red_bar)
             if loc_player is not None:
                 return loc_player
 
@@ -391,18 +391,21 @@ class MapleStoryAutoBot:
         else:
             if use_party_aided_search and self.cfg.get("party_aided_search", {}).get("enable", False):
                 logger.debug(f"[get_player_location_by_nametag] Party-aided search enabled but not available: "
-                           f"party_red_bar={self.loc_party_red_bar}")
+                           f"red_bars={len(self.loc_party_red_bar)}")
             self.is_using_party_aided_search = False
             logger.debug("[get_player_location_by_nametag] Using GLOBAL search")
 
         # Use global search (original logic)
         return self._get_player_location_by_nametag_global()
 
-    def _get_player_location_by_nametag_aided(self):
+    def _get_player_location_by_nametag_aided(self, red_bar_locations):
         '''
-        使用 party red bar 位置辅助的 nametag 检测（局部搜索）
+        使用 party red bar 位置辅助的 nametag 检测（支持多 red bar）
 
-        在 party red bar 周围的限定区域内搜索 nametag，提供约 33 倍性能提升。
+        在每个 party red bar 周围的限定区域内搜索 nametag，找到第一个匹配就返回。
+
+        Args:
+            red_bar_locations (list): 所有检测到的 red bar 位置列表 [(x1, y1), (x2, y2), ...]
 
         Returns:
             loc_player (tuple) or None: 玩家位置坐标，如果检测失败则返回 None
@@ -411,180 +414,201 @@ class MapleStoryAutoBot:
         offset_x, offset_y = self.cfg["party_aided_search"]["search_offset"]
         search_w, search_h = self.cfg["party_aided_search"]["search_size"]
 
-        # Calculate search region (relative to img_camera)
-        x0 = self.loc_party_red_bar[0] + offset_x
-        y0 = self.loc_party_red_bar[1] + offset_y
-        x1 = x0 + search_w
-        y1 = y0 + search_h
+        # Limit the number of red bars to process
+        max_bars = self.cfg["party_aided_search"].get("max_red_bars", 3)
+        red_bar_locations = red_bar_locations[:max_bars]
 
-        logger.debug(f"[_get_player_location_by_nametag_aided] "
-                    f"Party red bar: {self.loc_party_red_bar}, "
-                    f"Search region: [{x0}:{x1}, {y0}:{y1}], "
-                    f"Size: {search_w}x{search_h}")
+        logger.info(f"[_get_player_location_by_nametag_aided] "
+                   f"Searching nametag near {len(red_bar_locations)} red bar(s)")
 
-        # Boundary check: ensure ROI is within image bounds
-        img_camera_h, img_camera_w = self.img_frame_gray.shape
-        if x0 < 0 or y0 < 0 or x1 > img_camera_w or y1 > img_camera_h:
-            logger.warning(f"[_get_player_location_by_nametag_aided] "
-                          f"❌ Search region out of bounds: [{x0}:{x1}, {y0}:{y1}], "
-                          f"image size: {img_camera_w}x{img_camera_h}")
-            # 仍然绘制搜索区域用于调试
+        # Iterate through each red bar
+        for idx, loc_bar in enumerate(red_bar_locations, 1):
+            logger.debug(f"[_get_player_location_by_nametag_aided] "
+                        f"Searching near red bar #{idx}/{len(red_bar_locations)}: {loc_bar}")
+
+            # Calculate search region (relative to img_camera)
+            x0 = loc_bar[0] + offset_x
+            y0 = loc_bar[1] + offset_y
+            x1 = x0 + search_w
+            y1 = y0 + search_h
+
+            logger.debug(f"[_get_player_location_by_nametag_aided] "
+                        f"Red bar #{idx}: {loc_bar}, "
+                        f"Search region: [{x0}:{x1}, {y0}:{y1}], "
+                        f"Size: {search_w}x{search_h}")
+
+            # Boundary check: ensure ROI is within image bounds
+            img_camera_h, img_camera_w = self.img_frame_gray.shape
+            if x0 < 0 or y0 < 0 or x1 > img_camera_w or y1 > img_camera_h:
+                logger.warning(f"[_get_player_location_by_nametag_aided] "
+                              f"❌ Search region out of bounds for red bar #{idx}: "
+                              f"[{x0}:{x1}, {y0}:{y1}], image size: {img_camera_w}x{img_camera_h}")
+                # Draw out of bounds marker
+                if self.img_frame_debug is not None:
+                    cv2.rectangle(self.img_frame_debug, (max(0, x0), max(0, y0)),
+                                 (min(img_camera_w, x1), min(img_camera_h, y1)), (0, 0, 255), 1)
+                    cv2.putText(self.img_frame_debug, f"❌ OOB #{idx}",
+                               (max(0, x0), max(0, y0) - 10),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                continue  # Skip to next red bar
+
+            logger.debug(f"[_get_player_location_by_nametag_aided] ✅ Red bar #{idx} boundary check passed")
+
+            # Extract search region ROI
+            img_roi = self.img_frame_gray[y0:y1, x0:x1]
+
+            # Check if ROI is large enough to accommodate template
+            roi_h, roi_w = img_roi.shape
+            template_h, template_w = self.img_nametag_gray.shape
+            if roi_h < template_h or roi_w < template_w:
+                logger.warning(f"[_get_player_location_by_nametag_aided] "
+                              f"❌ ROI ({roi_w}x{roi_h}) smaller than template ({template_w}x{template_h}) for red bar #{idx}")
+                # Draw too small marker
+                if self.img_frame_debug is not None:
+                    cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 1)
+                    cv2.putText(self.img_frame_debug, f"❌ Too Small #{idx}",
+                               (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                continue  # Skip to next red bar
+
+            logger.debug(f"[_get_player_location_by_nametag_aided] ✅ Red bar #{idx} ROI size check passed: {roi_w}x{roi_h}")
+
+            # Draw current search region for debugging
             if self.img_frame_debug is not None:
-                cv2.rectangle(self.img_frame_debug, (max(0, x0), max(0, y0)),
-                             (min(img_camera_w, x1), min(img_camera_h, y1)), (0, 0, 255), 2)
-                cv2.putText(self.img_frame_debug, "Aided Search: OUT OF BOUNDS",
-                           (max(0, x0), max(0, y0) - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            return None
+                cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (255, 0, 0), 1)
+                cv2.putText(self.img_frame_debug, f"Search #{idx}",
+                           (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
 
-        logger.debug(f"[_get_player_location_by_nametag_aided] ✅ Boundary check passed")
+            # Get nametag image (based on mode)
+            if self.cfg["nametag"]["mode"] == "white_mask":
+                img_nametag = cv2.GaussianBlur(self.img_nametag_gray, (3, 3), 0)
+                img_roi = cv2.GaussianBlur(img_roi, (3, 3), 0)
+                lower_white, upper_white = (150, 255)
+                img_roi = cv2.inRange(img_roi, lower_white, upper_white)
+                img_nametag = cv2.inRange(img_nametag, lower_white, upper_white)
+            elif self.cfg["nametag"]["mode"] == "grayscale":
+                img_nametag = self.img_nametag_gray
+            elif self.cfg["nametag"]["mode"] == "histogram_eq":
+                img_nametag_eq = cv2.equalizeHist(self.img_nametag_gray)
+                img_roi_eq = cv2.equalizeHist(img_roi)
+                _, img_nametag = cv2.threshold(img_nametag_eq, 150, 255, cv2.THRESH_BINARY)
+                _, img_roi = cv2.threshold(img_roi_eq, 150, 255, cv2.THRESH_BINARY)
+            else:
+                logger.error(f"Unsupported nametag detection mode: {self.cfg['nametag']['mode']}")
+                continue  # Skip to next red bar
 
-        # Extract search region ROI
-        img_roi = self.img_frame_gray[y0:y1, x0:x1]
-
-        # Check if ROI is large enough to accommodate template
-        roi_h, roi_w = img_roi.shape
-        template_h, template_w = self.img_nametag_gray.shape
-        if roi_h < template_h or roi_w < template_w:
-            logger.warning(f"[_get_player_location_by_nametag_aided] "
-                          f"❌ ROI ({roi_w}x{roi_h}) smaller than template ({template_w}x{template_h})")
-            # 仍然绘制搜索区域用于调试
-            if self.img_frame_debug is not None:
-                cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 2)
-                cv2.putText(self.img_frame_debug, "Aided Search: ROI TOO SMALL",
-                           (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            return None
-
-        logger.debug(f"[_get_player_location_by_nametag_aided] ✅ ROI size check passed: {roi_w}x{roi_h}")
-
-        # Get nametag image (based on mode)
-        if self.cfg["nametag"]["mode"] == "white_mask":
-            img_nametag = cv2.GaussianBlur(self.img_nametag_gray, (3, 3), 0)
-            img_roi = cv2.GaussianBlur(img_roi, (3, 3), 0)
-            lower_white, upper_white = (150, 255)
-            img_roi = cv2.inRange(img_roi, lower_white, upper_white)
-            img_nametag = cv2.inRange(img_nametag, lower_white, upper_white)
-        elif self.cfg["nametag"]["mode"] == "grayscale":
-            img_nametag = self.img_nametag_gray
-        elif self.cfg["nametag"]["mode"] == "histogram_eq":
-            img_nametag_eq = cv2.equalizeHist(self.img_nametag_gray)
-            img_roi_eq = cv2.equalizeHist(img_roi)
-            _, img_nametag = cv2.threshold(img_nametag_eq, 150, 255, cv2.THRESH_BINARY)
-            _, img_roi = cv2.threshold(img_roi_eq, 150, 255, cv2.THRESH_BINARY)
-        else:
-            logger.error(f"Unsupported nametag detection mode: {self.cfg['nametag']['mode']}")
-            return None
-
-        # Padding (to avoid edge issues)
-        pad_y, pad_x = self.img_nametag.shape[:2]
-        img_roi = cv2.copyMakeBorder(
-            img_roi, pad_y, pad_y, pad_x, pad_x,
-            borderType=cv2.BORDER_REPLICATE
-        )
-
-        # Use last frame position (if within aided search region)
-        last_result = None
-        if not self.is_first_frame and self.loc_nametag != (0, 0):
-            # Check if last frame position is within current search region
-            if (x0 <= self.loc_nametag[0] < x1 and y0 <= self.loc_nametag[1] < y1):
-                last_result = (
-                    self.loc_nametag[0] - x0 + pad_x,
-                    self.loc_nametag[1] - y0 + pad_y
-                )
-
-        # Template matching (using split matching logic)
-        h, w = img_nametag.shape
-        num_splits = max(1, w // self.cfg["nametag"]["split_width"])
-        w_split = w // num_splits
-
-        mask = get_mask(self.img_nametag, (0, 255, 0))
-
-        nametag_splits = {}
-        for i in range(num_splits):
-            x_s = i * w_split
-            x_e = (i + 1) * w_split if i < num_splits - 1 else w
-            nametag_splits[f"{i+1}/{num_splits}"] = {
-                "img": img_nametag[:, x_s:x_e],
-                "mask": mask[:, x_s:x_e],
-                "last_result": (
-                    (last_result[0] + x_s, last_result[1]) if last_result else None
-                ),
-                "score_penalty": 0.0,
-                "offset_x": x_s
-            }
-
-        # Match template
-        matches = []
-        for tag_type, split in nametag_splits.items():
-            loc, score, is_cached = find_pattern_sqdiff(
-                img_roi,
-                split["img"],
-                last_result=split["last_result"],
-                mask=split["mask"],
-                local_search_radius=self.cfg["nametag"]["local_search_radius"],
-                global_threshold=self.cfg["nametag"]["global_diff_thres"]
+            # Padding (to avoid edge issues)
+            pad_y, pad_x = self.img_nametag.shape[:2]
+            img_roi = cv2.copyMakeBorder(
+                img_roi, pad_y, pad_y, pad_x, pad_x,
+                borderType=cv2.BORDER_REPLICATE
             )
-            w_match = split["img"].shape[1]
-            h_match = split["img"].shape[0]
-            score += split["score_penalty"]
-            matches.append((tag_type, loc, score, w_match, h_match, is_cached, split["offset_x"]))
 
-        if not matches:
-            logger.warning("[_get_player_location_by_nametag_aided] ❌ No matches found in aided search region")
-            # 绘制搜索区域用于调试
+            # Use last frame position (if within aided search region)
+            last_result = None
+            if not self.is_first_frame and self.loc_nametag != (0, 0):
+                # Check if last frame position is within current search region
+                if (x0 <= self.loc_nametag[0] < x1 and y0 <= self.loc_nametag[1] < y1):
+                    last_result = (
+                        self.loc_nametag[0] - x0 + pad_x,
+                        self.loc_nametag[1] - y0 + pad_y
+                    )
+
+            # Template matching (using split matching logic)
+            h, w = img_nametag.shape
+            num_splits = max(1, w // self.cfg["nametag"]["split_width"])
+            w_split = w // num_splits
+
+            mask = get_mask(self.img_nametag, (0, 255, 0))
+
+            nametag_splits = {}
+            for i in range(num_splits):
+                x_s = i * w_split
+                x_e = (i + 1) * w_split if i < num_splits - 1 else w
+                nametag_splits[f"{i+1}/{num_splits}"] = {
+                    "img": img_nametag[:, x_s:x_e],
+                    "mask": mask[:, x_s:x_e],
+                    "last_result": (
+                        (last_result[0] + x_s, last_result[1]) if last_result else None
+                    ),
+                    "score_penalty": 0.0,
+                    "offset_x": x_s
+                }
+
+            # Match template
+            matches = []
+            for tag_type, split in nametag_splits.items():
+                loc, score, is_cached = find_pattern_sqdiff(
+                    img_roi,
+                    split["img"],
+                    last_result=split["last_result"],
+                    mask=split["mask"],
+                    local_search_radius=self.cfg["nametag"]["local_search_radius"],
+                    global_threshold=self.cfg["nametag"]["global_diff_thres"]
+                )
+                w_match = split["img"].shape[1]
+                h_match = split["img"].shape[0]
+                score += split["score_penalty"]
+                matches.append((tag_type, loc, score, w_match, h_match, is_cached, split["offset_x"]))
+
+            if not matches:
+                logger.warning(f"[_get_player_location_by_nametag_aided] "
+                              f"❌ No matches found in aided search region for red bar #{idx}")
+                # Draw failure marker
+                if self.img_frame_debug is not None:
+                    cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 1)
+                    cv2.putText(self.img_frame_debug, f"❌ No Match #{idx}",
+                               (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                continue  # Continue to next red bar
+
+            # Select best match
+            matches.sort(key=lambda x: (not x[5], x[2]))
+            tag_type, loc_nametag_roi, score, w_match, h_match, is_cached, offset_x = matches[0]
+
+            # Convert back to global coordinates
+            loc_nametag = (
+                loc_nametag_roi[0] - offset_x - pad_x + x0,
+                loc_nametag_roi[1] - pad_y + y0
+            )
+
+            # Check score
+            if score >= self.cfg["nametag"]["diff_thres"]:
+                logger.warning(f"[_get_player_location_by_nametag_aided] "
+                              f"❌ Match score {score:.2f} exceeds threshold {self.cfg['nametag']['diff_thres']} for red bar #{idx}")
+                # Draw high score marker
+                if self.img_frame_debug is not None:
+                    cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 1)
+                    cv2.putText(self.img_frame_debug, f"❌ Score {score:.2f} #{idx}",
+                               (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                continue  # Continue to next red bar
+
+            # Found a match! Update nametag location and return
+            self.loc_nametag = loc_nametag
+            logger.info(f"[_get_player_location_by_nametag_aided] ✅ Aided search SUCCESS "
+                       f"near red bar #{idx}: score={score:.3f}, tag_type={tag_type}, cached={is_cached}")
+
+            loc_player = (
+                self.loc_nametag[0] + w // 2,
+                self.loc_nametag[1] - self.cfg["nametag"]["offset"][1]
+            )
+
+            # Debug visualization (success)
             if self.img_frame_debug is not None:
-                cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 2)
-                cv2.putText(self.img_frame_debug, "Aided Search: NO MATCH",
-                           (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            return None
+                # Draw successful search region (thick green box)
+                cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 255, 0), 2)
+                cv2.putText(self.img_frame_debug, f"✅ Match #{idx} (score={score:.2f})",
+                           (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Select best match
-        matches.sort(key=lambda x: (not x[5], x[2]))
-        tag_type, loc_nametag_roi, score, w_match, h_match, is_cached, offset_x = matches[0]
+                # Draw nametag detection box
+                draw_rectangle(self.img_frame_debug, self.loc_nametag,
+                              self.img_nametag.shape, (0, 255, 0),
+                              f"Nametag ({tag_type}, {score:.2f})", thickness=2)
 
-        # Convert back to global coordinates
-        loc_nametag = (
-            loc_nametag_roi[0] - offset_x - pad_x + x0,
-            loc_nametag_roi[1] - pad_y + y0
-        )
+            return loc_player  # Return immediately on first match
 
-        # Check score
-        if score >= self.cfg["nametag"]["diff_thres"]:
-            logger.warning(f"[_get_player_location_by_nametag_aided] "
-                          f"❌ Match score {score:.2f} exceeds threshold {self.cfg['nametag']['diff_thres']}")
-            # 绘制搜索区域用于调试
-            if self.img_frame_debug is not None:
-                cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (0, 0, 255), 2)
-                cv2.putText(self.img_frame_debug, f"Aided Search: SCORE {score:.2f} > {self.cfg['nametag']['diff_thres']}",
-                           (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
-            return None
-
-        # Update nametag location
-        self.loc_nametag = loc_nametag
-        logger.info(f"[_get_player_location_by_nametag_aided] ✅ Aided search SUCCESS: "
-                   f"score={score:.3f}, tag_type={tag_type}, cached={is_cached}")
-
-        loc_player = (
-            self.loc_nametag[0] + w // 2,
-            self.loc_nametag[1] - self.cfg["nametag"]["offset"][1]
-        )
-
-        # Debug visualization (always draw search region)
-        if self.img_frame_debug is not None:
-            # Draw search region boundary (thick blue line for success)
-            cv2.rectangle(self.img_frame_debug, (x0, y0), (x1, y1), (255, 0, 0), 2)
-            cv2.putText(self.img_frame_debug, "✅ Party-Aided Search SUCCESS",
-                       (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-
-            # Draw nametag detection box
-            draw_rectangle(self.img_frame_debug, self.loc_nametag,
-                           self.img_nametag.shape, (0, 255, 0), "")
-            text = f"NameTag,{round(score, 2)},{'cached' if is_cached else 'missed'},{tag_type}"
-            cv2.putText(self.img_frame_debug, text,
-                        (self.loc_nametag[0], self.loc_nametag[1] + self.img_nametag.shape[0] + 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        return loc_player
+        # All red bars searched and no match found
+        logger.warning(f"[_get_player_location_by_nametag_aided] "
+                      f"❌ No nametag found near any of {len(red_bar_locations)} red bar(s)")
+        return None
 
     def _get_player_location_by_nametag_global(self):
         '''
@@ -716,6 +740,10 @@ class MapleStoryAutoBot:
     def get_player_location_by_party_red_bar(self):
         '''
         get_player_location_by_party_red_bar
+
+        Returns:
+            loc_player: 玩家位置（基于最大的 red bar 计算，向后兼容）
+            red_bar_locations: 所有检测到的 red bar 位置列表 [(x1, y1), (x2, y2), ...]
         '''
         # Zero out minimap area in the img_frame
         img_frame = self.img_frame.copy()
@@ -748,24 +776,35 @@ class MapleStoryAutoBot:
                 boxs.append((x, y, w, h))
 
         if not boxs:
-            return None, None  # red bar not found
+            return None, []  # ✅ 返回空列表
 
         # Sort box by area
         boxs.sort(key=lambda box: box[2] * box[3], reverse=True)
 
-        # Consider the biggest area as party red bar
-        x, y, w, h = boxs[0]
+        # ✅ 提取所有 red bar 位置
+        red_bar_locations = [(box[0], box[1]) for box in boxs]
 
-        # Offset coordinate
-        loc_party_red_bar = (x, y)
+        # 使用最大的 red bar 计算 loc_player（保持向后兼容）
+        x, y, w, h = boxs[0]
         loc_player = (x + self.cfg["party_red_bar"]["offset"][0],
                       y + self.cfg["party_red_bar"]["offset"][1])
 
-        # visualize for debug
-        draw_rectangle(self.img_frame_debug, loc_party_red_bar,
-                    (h, w), (0, 255, 0), "party red bar", thickness=1, text_height=0.4)
+        # ✅ 标记所有 red bar 用于调试
+        for idx in range(len(red_bar_locations)):
+            bar_x, bar_y, bar_w, bar_h = boxs[idx]
+            if idx == 0:
+                # 最大的用绿色
+                color = (0, 255, 0)
+                label = f"Party Red Bar #{idx+1} (Largest)"
+            else:
+                # 其他的用黄色
+                color = (0, 255, 255)
+                label = f"Party Red Bar #{idx+1}"
 
-        return loc_player, loc_party_red_bar
+            draw_rectangle(self.img_frame_debug, (bar_x, bar_y),
+                          (bar_h, bar_w), color, label, thickness=1, text_height=0.4)
+
+        return loc_player, red_bar_locations
 
     def get_player_location_on_global_map(self):
         '''
@@ -1903,20 +1942,20 @@ class MapleStoryAutoBot:
         #################################
         # Get player location in game window
         if self.cfg["nametag"]["enable"]:
-            # Try to update party red bar location first (whether nametag is enabled or not)
+            # Try to update party red bar locations first (whether nametag is enabled or not)
             # This provides auxiliary information for nametag detection
             if self.cfg.get("party_aided_search", {}).get("enable", False):
-                _, loc_party_red_bar = self.get_player_location_by_party_red_bar()
-                # ✅ 每一帧都更新，检测失败时设置为 (0, 0)
-                self.loc_party_red_bar = loc_party_red_bar if loc_party_red_bar is not None else (0, 0)
+                _, loc_party_red_bars = self.get_player_location_by_party_red_bar()
+                # ✅ 每一帧都更新，检测失败时设置为空列表
+                self.loc_party_red_bar = loc_party_red_bars if loc_party_red_bars is not None else []
 
             # Then perform nametag detection (may use party red bar aided search)
             loc_player = self.get_player_location_by_nametag(use_party_aided_search=True)
         else:
             # Not using nametag, only use party red bar
-            loc_player, loc_party_red_bar = self.get_player_location_by_party_red_bar()
-            # ✅ 每一帧都更新，检测失败时设置为 (0, 0)
-            self.loc_party_red_bar = loc_party_red_bar if loc_party_red_bar is not None else (0, 0)
+            loc_player, loc_party_red_bars = self.get_player_location_by_party_red_bar()
+            # ✅ 每一帧都更新，检测失败时设置为空列表
+            self.loc_party_red_bar = loc_party_red_bars if loc_party_red_bars is not None else []
 
         # Update player location
         if loc_player is not None:
